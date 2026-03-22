@@ -1,68 +1,92 @@
-# ⚡ Zwift Ride → TrainingPeaks Virtual Bridge
+# ⚡ ZTPV — Zwift → TrainingPeaks Virtual Bridge
 
-**Direct BLE connection from your Zwift Ride controllers to TrainingPeaks Virtual. No middleman apps. No BikeControl. No QZ. Free.**
+**Direct BLE connection from Zwift controllers to TrainingPeaks Virtual. No middleman apps. No BikeControl. No QZ. Free.**
 
 Warriors Racing Edition 🏴
 
 ## What It Does
 
-Connects directly to your Zwift Ride's left controller via Bluetooth LE, decodes all 16 buttons from the protobuf wire format, and injects keyboard shortcuts into TrainingPeaks Virtual.
+Connects directly to your Zwift controllers via Bluetooth LE, decodes button presses, and sends keyboard shortcuts to TrainingPeaks Virtual — gear shifting, tactical positioning, camera views, screenshots, and more.
 
 ```
-Zwift Ride Controller ──BLE──► This App ──Keypress──► TPVirtual
-     (left side)              (decode)              (all controls)
+Zwift Controllers ──BLE──► ZTPV ──Keypress──► TrainingPeaks Virtual
+  (Ride or Play)         (decode)            (all controls)
 ```
 
-## Full Button Mapping
+## Supported Controllers
+
+| Controller | Protocol | Status |
+|---|---|---|
+| **Zwift Ride** (FC82 firmware) | Plaintext protobuf | ✅ All 16 buttons working |
+| **Zwift Play** | ECDH + AES-CCM encrypted | ✅ Left controller working |
+| **Zwift Click** | Same as Play | 🔧 Untested |
+
+## Button Mapping
+
+### Zwift Ride
 
 | Ride Button | TPV Action | Key |
 |---|---|---|
-| **Left Shift UP** | Gear UP (harder) | Num+ |
-| **Left Shift DOWN** | Gear DOWN (easier) | Num- |
-| **Right Shift UP** | Gear UP (harder) | Num+ |
-| **Right Shift DOWN** | Gear DOWN (easier) | Num- |
-| **D-Pad LEFT** | Tactical position LEFT | ← |
-| **D-Pad RIGHT** | Tactical position RIGHT | → |
-| **D-Pad UP** | Navigate UP | ↑ |
-| **D-Pad DOWN** | U-Turn / Look back | ↓ |
-| **A button** | Camera view cycle | V |
-| **B button** | Elbow flick | Space |
-| **Y button** | Screenshot | F10 |
-| **Z button** | Mark lap | L |
-| **PowerUp LEFT** | Toggle workout graph | G |
-| **PowerUp RIGHT** | Take a break | B |
-| **On/Off LEFT** | Skip workout block | Tab |
-| **On/Off RIGHT** | Menu / Back | Esc |
+| Right Shift UP | Gear UP | = |
+| Right Shift DOWN | Gear DOWN | - |
+| Left Shift UP | Gear UP | = |
+| Left Shift DOWN | Gear DOWN | - |
+| D-Pad LEFT / RIGHT | Tactical positioning | ← → |
+| D-Pad UP | Navigate UP | ↑ |
+| D-Pad DOWN | U-Turn / Look back | ↓ |
+| A | Camera view cycle (1-0) | 1,2,3...0 |
+| B | Elbow flick | Space |
+| Y | Screenshot | F10 |
+| Z | Mark lap | L |
+| Left Powerup | Toggle workout graph | G |
+| Right Powerup | Take a break | B |
+| Left On/Off | Skip workout block | Tab |
+| Right On/Off | Menu / Back | Esc |
 
-All mappings are customizable via `~/.zwift-ride-tpv/config.json`.
+### Zwift Play
 
-## Quick Start (Python)
+Same actions as Ride, plus analog lever shifting:
+- Left lever squeeze → Gear DOWN
+- Right lever squeeze → Gear UP
+- 500ms cooldown prevents repeated firing
+
+## Download & Install
+
+### Option 1: Standalone executable (recommended)
+
+Download `ZwiftRideTPV-macos-arm64.zip` from [Releases](https://github.com/sebdenes/ZTPV/releases).
+
+Unzip and run — no Python needed.
+
+### Option 2: Run from source
 
 ```bash
-pip3 install bleak pyobjc-framework-Quartz
+pip3 install bleak cryptography pyobjc-framework-Quartz
 python3 zwift_ride_tpv.py
 ```
 
-## Build macOS App
+### Option 3: Desktop launcher
 
 ```bash
-pip3 install bleak pyobjc-framework-Quartz py2app
-chmod +x build_mac.sh
-./build_mac.sh
-
-# Install
-cp -R 'dist/Zwift Ride TPV.app' /Applications/
+cat > ~/Desktop/ZTPV.command << 'EOF'
+#!/bin/bash
+cd ~/ZRTPV
+python3 zwift_ride_tpv.py
+EOF
+chmod +x ~/Desktop/ZTPV.command
 ```
 
-## Setup Checklist
+## Setup
 
-1. **Disconnect Zwift** from the Ride controllers (BLE is exclusive)
-2. **Wake controller** — press any button until blue LED blinks
-3. **Start TPVirtual** — open a ride/race
-4. **Run the bridge** — `python3 zwift_ride_tpv.py` or launch the .app
+1. **Start TrainingPeaks Virtual** and begin a ride
+2. **Disconnect Zwift** — controllers can only connect to one app
+3. **Wake controllers** — press any button (LED blinks)
+4. **Run ZTPV** — it auto-detects Ride vs Play and connects
 5. **Grant permissions** when macOS prompts:
    - Bluetooth access
    - Accessibility (System Settings → Privacy & Security → Accessibility)
+
+ZTPV targets the TPV process directly — keypresses work even when Terminal or another app is in the foreground.
 
 ## Configuration
 
@@ -72,58 +96,72 @@ Save a default config to customize:
 python3 zwift_ride_tpv.py --save-config
 ```
 
-Edit `~/.zwift-ride-tpv/config.json`:
+Edit `~/.zwift-ride-tpv/config.json` to remap any button. Key codes are macOS virtual key codes.
 
-```json
-{
-  "button_map": {
-    "A": {"key": 9, "desc": "Camera view"},
-    "B": {"key": 49, "desc": "Elbow flick"}
-  },
-  "debounce_ms": 150,
-  "auto_reconnect": true,
-  "scan_timeout": 30
-}
+```bash
+python3 zwift_ride_tpv.py --show-map    # show current mapping
+python3 zwift_ride_tpv.py --help        # all options
 ```
-
-Key codes are macOS virtual key codes. Run `--show-map` to see current mappings.
 
 ## How It Works
 
-### BLE Protocol (Makinolo's research)
+### Zwift Ride (FC82 firmware)
 
-- **Service UUID**: `FC82` (16-bit, Jan 2025+ firmware) or `00000001-19ca-4651-86e5-fa29dcdd09d1` (legacy)
-- **Handshake**: Write `"RideOn"` → receive `"RideOn"` back. No encryption.
-- **Notifications**: Protobuf message ID `0x23` with 32-bit button bitmap (inverse logic)
-- **Single connection**: Left controller tunnels all right-side button presses
+- BLE Service: `FC82` (16-bit)
+- Handshake: write `"RideOn"` → receive `"RideOn"` back
+- Buttons: protobuf message `0x23` with 16-bit bitmap (inverse logic)
+- Single connection to LEFT controller (tunnels right-side presses too, but left-only buttons like D-pad only appear here)
 
-### vs. Alternatives
+### Zwift Play (encrypted)
 
-| | BikeControl | tpv-zclick | **This** |
+- BLE Service: `00000001-19ca-4651-86e5-fa29dcdd09d1`
+- ECDH key exchange (secp256r1 / P-256)
+- HKDF-SHA256 key derivation (36 bytes → 32 AES key + 4 nonce prefix)
+- AES-CCM encrypted messages (4-byte counter, 4-byte MIC tag)
+- Connects to both LEFT and RIGHT controllers independently
+- Button data: protobuf message `0x07` with per-field tags
+
+### BLE Characteristics (same layout for both)
+
+| UUID | Properties | Role |
+|---|---|---|
+| 002 | notify | Button data stream |
+| 003 | write-without-response | Send handshake / commands |
+| 004 | indicate, read | Receive handshake response |
+
+## vs. Alternatives
+
+| | BikeControl | tpv-zclick | **ZTPV** |
 |---|---|---|---|
 | Middleman app | Self | QZ App | **None** |
 | Direct BLE | No | No | **Yes** |
 | Cost | Paid Pro | Free | **Free** |
-| All 16 buttons | Yes | Shift only | **Yes** |
-| macOS app | Yes | Script | **Yes** |
-| Zwift Ride native | Yes | Click only | **Yes** |
+| Encryption support | Yes | No | **Yes** |
+| Ride FC82 support | Yes | No | **Yes** |
+| macOS executable | Yes | No | **Yes** |
+| Open source | Partial | Yes | **Yes** |
 
 ## Troubleshooting
 
-**"No Zwift Ride found"** → Wake controller, disconnect Zwift, check Bluetooth.
+**"No Zwift controllers found"** — Wake controllers, make sure Zwift app is disconnected, check Bluetooth is on.
 
-**Shifts not working in TPVirtual** → Grant Accessibility permission to Terminal/.app.
+**Shifts show in console but TPV doesn't respond** — Make sure TPV is running before ZTPV starts (it needs to find the TPV process PID).
 
-**High latency** → Install `pyobjc-framework-Quartz` (CGEvents ~1ms vs AppleScript ~100ms).
+**"TPV process not found"** — Run `ps aux | grep -i training` to find the exact process name, then update the search in the code.
 
-**Config changes not taking effect** → Delete `~/.zwift-ride-tpv/config.json` and restart.
+**Permissions** — Grant Accessibility to Terminal (or the executable) in System Settings → Privacy & Security → Accessibility.
 
 ## Credits
 
-- **Makinolo** — Zwift Ride BLE protocol reverse engineering
-- **Rouvy** — Proving third-party Zwift hardware support is viable
+- **Makinolo** — Zwift Play and Ride BLE protocol reverse engineering
+- **Rouvy** — Proving third-party Zwift hardware support is legally viable
 - **OpenBikeControl** — Pioneering the multi-platform bridge concept
+- **ajchellew/zwiftplay** — Zwift Play protocol research
 
 ## License
 
 MIT — use it, fork it, share it with your team.
+
+---
+
+Built by [Sebastien Denes](https://www.linkedin.com/in/sebastiendenes/) / Warriors Racing 🏴
