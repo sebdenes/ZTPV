@@ -1,0 +1,4 @@
+bleak>=0.21.0
+pyobjc-framework-Quartz>=9.0
+# For building macOS .app:
+# py2app>=0.28
